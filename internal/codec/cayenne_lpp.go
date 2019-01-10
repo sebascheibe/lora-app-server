@@ -39,7 +39,7 @@ const (
 	lppFrequency		 byte = 118		/* custom type */
 	lppPercentage		 byte = 120		/* custom type */
 	lppAltitude			 byte = 121		/* custom type */
-	lppLoadControl		 byte = 122		/* custom type */
+	lppLoad		 		 byte = 122		/* custom type */
 	lppPressure			 byte = 123		/* custom type */
 	lppLoudness			 byte = 124		/* custom type */
 	lppConcentration	 byte = 125		/* custom type */
@@ -138,7 +138,7 @@ type CayenneLPP struct {
 	Frequency		  map[byte]float64
 	Percentage		  map[byte]float64
 	Altitude		  map[byte]float64
-	LoadControl		  map[byte]float64
+	Load			  map[byte]float64
 	Pressure		  map[byte]float64
 	Loudness		  map[byte]float64
 	Concentration	  map[byte]float64
@@ -163,7 +163,7 @@ type CayenneLPP struct {
 	Moisture		  map[byte]float64
 	Smoke			  map[byte]float64
 	Alcohol			  map[byte]float64
-	LPG		  map[byte]float64
+	LPG		  		  map[byte]float64
 	CarbonMonoxide	  map[byte]float64
 	CarbonDioxide	  map[byte]float64
 	AirQuality		  map[byte]float64
@@ -242,8 +242,8 @@ func (c *CayenneLPP) DecodeBytes(data []byte) error {
 			err = lppPercentageDecode(buf[0], r, c)
 		case lppAltitude:  /* custom type*/
 			err = lppAltitudeDecode(buf[0], r, c)
-		case lppLoadControl:  /* custom type*/
-			err = lppLoadControlDecode(buf[0], r, c)
+		case lppLoad:  /* custom type*/
+			err = lppLoadDecode(buf[0], r, c)
 		case lppPressure:  /* custom type*/
 			err = lppPressureDecode(buf[0], r, c)
 		case lppLoudness:  /* custom type*/
@@ -373,8 +373,8 @@ func (c CayenneLPP) EncodeToBytes() ([]byte, error) {
 			return nil, err
 		}
 	}
-	for k, v := range c.PowerManagement {
-		if err := lppPowerManagementEncode(k, w, v); err != nil {
+	for k, v := range c.PowerMeasurement {
+		if err := lppPowerMeasurementEncode(k, w, v); err != nil {
 			return nil, err
 		}
 	}
@@ -418,7 +418,6 @@ func (c CayenneLPP) EncodeToBytes() ([]byte, error) {
 			return nil, err
 		}
 	}
-	//continue with Voltage to Time (16)
 	for k, v := range c.Voltage {
 		if err := lppVoltageEncode(k, w, v); err != nil {
 			return nil, err
@@ -444,8 +443,8 @@ func (c CayenneLPP) EncodeToBytes() ([]byte, error) {
 			return nil, err
 		}
 	}
-	for k, v := range c.LoadControl {
-		if err := lppLoadControlEncode(k, w, v); err != nil {
+	for k, v := range c.Load {
+		if err := lppLoadEncode(k, w, v); err != nil {
 			return nil, err
 		}
 	}
@@ -615,7 +614,7 @@ func (c CayenneLPP) EncodeToBytes() ([]byte, error) {
 		}
 	}
 	for k, v := range c.Velocity {
-		if err := lpplppVelocityEncode(k, w, v); err != nil {
+		if err := lppVelocityEncode(k, w, v); err != nil {
 			return nil, err
 		}
 	}
@@ -708,9 +707,9 @@ func lppGenericSensorDecode(channel uint8, r io.Reader, out *CayenneLPP) error {
 		return errors.Wrap(err, "read uint16 error")
 	}
 	if out.GenericSensor == nil {
-		out.GenericSensor = make(map[uint8]uint16)
+		out.GenericSensor = make(map[uint8]float64)
 	}
-	out.GenericSensor[channel] = val
+	out.GenericSensor[channel] = float64(val)
 	return nil
 }
 
@@ -830,7 +829,7 @@ func lppActuationDecode(channel uint8, r io.Reader, out *CayenneLPP) error {
 	if out.Actuation == nil {
 		out.Actuation = make(map[uint8]float64)
 	}
-	out.Actuation[channel] = val
+	out.Actuation[channel] = float64(val)
 	return nil
 }
 
@@ -850,7 +849,7 @@ func lppSetPointDecode(channel uint8, r io.Reader, out *CayenneLPP) error {
 	if out.SetPoint == nil {
 		out.SetPoint = make(map[uint8]float64)
 	}
-	out.SetPoint[channel] = val
+	out.SetPoint[channel] = float64(val)
 	return nil
 }
 
@@ -963,7 +962,7 @@ func lppMagnetometerDecode(channel uint8, r io.Reader, out *CayenneLPP) error {
 		}
 	}
 	if out.Magnetometer == nil {
-		out.Magnetometer = make(map[uint8]Accelerometer)
+		out.Magnetometer = make(map[uint8]Magnetometer)
 	}
 	out.Magnetometer[channel] = Magnetometer{
 		X: float64(data[0]) / 1000,
@@ -1369,7 +1368,7 @@ func lppColourDecode(channel uint8, r io.Reader, out *CayenneLPP) error {
 	if out.Colour == nil {
 		out.Colour = make(map[uint8]float64)
 	}
-	out.Colour[channel] = val
+	out.Colour[channel] = float64(val)
 	return nil
 }
 
@@ -1384,7 +1383,7 @@ func lppColourEncode(channel uint8, w io.Writer, data float64) error {
 func lppGPSLocationDecode(channel uint8, r io.Reader, out *CayenneLPP) error {
 	var lat int32
 	var lon int32
-	var alt int24
+	var alt int16
 	// data := make([]int32, 3)
 	// buf := make([]byte, 9)
 
@@ -1420,10 +1419,10 @@ func lppGPSLocationDecode(channel uint8, r io.Reader, out *CayenneLPP) error {
 
 func lppGPSLocationEncode(channel uint8, w io.Writer, data GPSLocation) error {
 	w.Write([]byte{channel, lppGPSLocation})
-	lat := int32(data.Latitude * 1000000),
-	lon := int32(data.Longitude * 1000000),
-	alt := int24(data.Altitude * 100),
-	}
+	lat := int32(data.Latitude * 1000000)
+	lon := int32(data.Longitude * 1000000)
+	alt := int16(data.Altitude * 100)
+	
 	// for _, v := range vals {
 	// 	b := make([]byte, 4)
 	// 	v = v << 8
@@ -1450,7 +1449,7 @@ func lppPositionerDecode(channel uint8, r io.Reader, out *CayenneLPP) error {
 	if out.Positioner == nil {
 		out.Positioner = make(map[uint8]float64)
 	}
-	out.Positioner[channel] = val
+	out.Positioner[channel] = float64(val)
 	return nil
 }
 
@@ -1470,7 +1469,7 @@ func lppSwitchDecode(channel uint8, r io.Reader, out *CayenneLPP) error {
 	if out.Switch == nil {
 		out.Switch = make(map[uint8]float64)
 	}
-	out.Switch[channel] = val
+	out.Switch[channel] = float64(val)
 	return nil
 }
 
@@ -1490,7 +1489,7 @@ func lppLevelControlDecode(channel uint8, r io.Reader, out *CayenneLPP) error {
 	if out.LevelControl == nil {
 		out.LevelControl = make(map[uint8]float64)
 	}
-	out.LevelControl[channel] = val
+	out.LevelControl[channel] = float64(val)
 	return nil
 }
 
@@ -1510,7 +1509,7 @@ func lppUpDownControlDecode(channel uint8, r io.Reader, out *CayenneLPP) error {
 	if out.UpDownControl == nil {
 		out.UpDownControl = make(map[uint8]float64)
 	}
-	out.UpDownControl[channel] = val
+	out.UpDownControl[channel] = float64(val)
 	return nil
 }
 
@@ -1530,7 +1529,7 @@ func lppMultipleAxisJoystickDecode(channel uint8, r io.Reader, out *CayenneLPP) 
 		}
 	}
 	if out.MultipleAxisJoystick == nil {
-		out.MultipleAxisJoystick = make(map[uint8]Gyrometer)
+		out.MultipleAxisJoystick = make(map[uint8]MultipleAxisJoystick)
 	}
 	out.MultipleAxisJoystick[channel] = MultipleAxisJoystick{
 		X: float64(data[0]) / 100,
@@ -1576,306 +1575,6 @@ func lppRateEncode(channel uint8, w io.Writer, data float64) error {
 }
 
 func lppPushButtonDecode(channel uint8, r io.Reader, out *CayenneLPP) error {
-	var val int16
-	if err := binary.Read(r, binary.BigEndian, &val); err != nil {
-		return errors.Wrap(err, "read int16 error")
-	}
-	if out.PushButton == nil {
-		out.PushButton = make(map[uint8]float64)
-	}
-	out.PushButton[channel] = val
-	return nil
-}
-
-func lppPushButtonEncode(channel uint8, w io.Writer, data float64) error {
-	w.Write([]byte{channel, lppPushButton})
-	if err := binary.Write(w, binary.BigEndian, int16(data*10)); err != nil {
-		return errors.Wrap(err, "write int16 error")
-	}
-	return nil
-}
-
-func lppRateDecode(channel uint8, r io.Reader, out *CayenneLPP) error {
-	var val int16
-	if err := binary.Read(r, binary.BigEndian, &val); err != nil {
-		return errors.Wrap(err, "read int16 error")
-	}
-	if out.Rate == nil {
-		out.Rate = make(map[uint8]float64)
-	}
-	out.Rate[channel] = float64(val) / 10
-	return nil
-}
-
-func lppRateEncode(channel uint8, w io.Writer, data float64) error {
-	w.Write([]byte{channel, lppRate})
-	if err := binary.Write(w, binary.BigEndian, int16(data*10)); err != nil {
-		return errors.Wrap(err, "write int16 error")
-	}
-	return nil
-}
-
-func lppRateDecode(channel uint8, r io.Reader, out *CayenneLPP) error {
-	var val int16
-	if err := binary.Read(r, binary.BigEndian, &val); err != nil {
-		return errors.Wrap(err, "read int16 error")
-	}
-	if out.Rate == nil {
-		out.Rate = make(map[uint8]float64)
-	}
-	out.Rate[channel] = float64(val) / 10
-	return nil
-}
-
-func lppRateEncode(channel uint8, w io.Writer, data float64) error {
-	w.Write([]byte{channel, lppRate})
-	if err := binary.Write(w, binary.BigEndian, int16(data*10)); err != nil {
-		return errors.Wrap(err, "write int16 error")
-	}
-	return nil
-}
-
-func lppRateDecode(channel uint8, r io.Reader, out *CayenneLPP) error {
-	var val int16
-	if err := binary.Read(r, binary.BigEndian, &val); err != nil {
-		return errors.Wrap(err, "read int16 error")
-	}
-	if out.Rate == nil {
-		out.Rate = make(map[uint8]float64)
-	}
-	out.Rate[channel] = float64(val) / 10
-	return nil
-}
-
-func lppRateEncode(channel uint8, w io.Writer, data float64) error {
-	w.Write([]byte{channel, lppRate})
-	if err := binary.Write(w, binary.BigEndian, int16(data*10)); err != nil {
-		return errors.Wrap(err, "write int16 error")
-	}
-	return nil
-}
-
-func lppRateDecode(channel uint8, r io.Reader, out *CayenneLPP) error {
-	var val int16
-	if err := binary.Read(r, binary.BigEndian, &val); err != nil {
-		return errors.Wrap(err, "read int16 error")
-	}
-	if out.Rate == nil {
-		out.Rate = make(map[uint8]float64)
-	}
-	out.Rate[channel] = float64(val) / 10
-	return nil
-}
-
-func lppRateEncode(channel uint8, w io.Writer, data float64) error {
-	w.Write([]byte{channel, lppRate})
-	if err := binary.Write(w, binary.BigEndian, int16(data*10)); err != nil {
-		return errors.Wrap(err, "write int16 error")
-	}
-	return nil
-}
-
-func lppRateDecode(channel uint8, r io.Reader, out *CayenneLPP) error {
-	var val int16
-	if err := binary.Read(r, binary.BigEndian, &val); err != nil {
-		return errors.Wrap(err, "read int16 error")
-	}
-	if out.Rate == nil {
-		out.Rate = make(map[uint8]float64)
-	}
-	out.Rate[channel] = float64(val) / 10
-	return nil
-}
-
-func lppRateEncode(channel uint8, w io.Writer, data float64) error {
-	w.Write([]byte{channel, lppRate})
-	if err := binary.Write(w, binary.BigEndian, int16(data*10)); err != nil {
-		return errors.Wrap(err, "write int16 error")
-	}
-	return nil
-}
-
-func lppRateDecode(channel uint8, r io.Reader, out *CayenneLPP) error {
-	var val int16
-	if err := binary.Read(r, binary.BigEndian, &val); err != nil {
-		return errors.Wrap(err, "read int16 error")
-	}
-	if out.Rate == nil {
-		out.Rate = make(map[uint8]float64)
-	}
-	out.Rate[channel] = float64(val) / 10
-	return nil
-}
-
-func lppRateEncode(channel uint8, w io.Writer, data float64) error {
-	w.Write([]byte{channel, lppRate})
-	if err := binary.Write(w, binary.BigEndian, int16(data*10)); err != nil {
-		return errors.Wrap(err, "write int16 error")
-	}
-	return nil
-}
-
-func lppRateDecode(channel uint8, r io.Reader, out *CayenneLPP) error {
-	var val int16
-	if err := binary.Read(r, binary.BigEndian, &val); err != nil {
-		return errors.Wrap(err, "read int16 error")
-	}
-	if out.Rate == nil {
-		out.Rate = make(map[uint8]float64)
-	}
-	out.Rate[channel] = float64(val) / 10
-	return nil
-}
-
-func lppRateEncode(channel uint8, w io.Writer, data float64) error {
-	w.Write([]byte{channel, lppRate})
-	if err := binary.Write(w, binary.BigEndian, int16(data*10)); err != nil {
-		return errors.Wrap(err, "write int16 error")
-	}
-	return nil
-}
-
-func lppRateDecode(channel uint8, r io.Reader, out *CayenneLPP) error {
-	var val int16
-	if err := binary.Read(r, binary.BigEndian, &val); err != nil {
-		return errors.Wrap(err, "read int16 error")
-	}
-	if out.Rate == nil {
-		out.Rate = make(map[uint8]float64)
-	}
-	out.Rate[channel] = float64(val) / 10
-	return nil
-}
-
-func lppRateEncode(channel uint8, w io.Writer, data float64) error {
-	w.Write([]byte{channel, lppRate})
-	if err := binary.Write(w, binary.BigEndian, int16(data*10)); err != nil {
-		return errors.Wrap(err, "write int16 error")
-	}
-	return nil
-}
-
-func lppRateDecode(channel uint8, r io.Reader, out *CayenneLPP) error {
-	var val int16
-	if err := binary.Read(r, binary.BigEndian, &val); err != nil {
-		return errors.Wrap(err, "read int16 error")
-	}
-	if out.Rate == nil {
-		out.Rate = make(map[uint8]float64)
-	}
-	out.Rate[channel] = float64(val) / 10
-	return nil
-}
-
-func lppRateEncode(channel uint8, w io.Writer, data float64) error {
-	w.Write([]byte{channel, lppRate})
-	if err := binary.Write(w, binary.BigEndian, int16(data*10)); err != nil {
-		return errors.Wrap(err, "write int16 error")
-	}
-	return nil
-}
-
-func lppRateDecode(channel uint8, r io.Reader, out *CayenneLPP) error {
-	var val int16
-	if err := binary.Read(r, binary.BigEndian, &val); err != nil {
-		return errors.Wrap(err, "read int16 error")
-	}
-	if out.Rate == nil {
-		out.Rate = make(map[uint8]float64)
-	}
-	out.Rate[channel] = float64(val) / 10
-	return nil
-}
-
-func lppRateEncode(channel uint8, w io.Writer, data float64) error {
-	w.Write([]byte{channel, lppRate})
-	if err := binary.Write(w, binary.BigEndian, int16(data*10)); err != nil {
-		return errors.Wrap(err, "write int16 error")
-	}
-	return nil
-}
-
-func lppRateDecode(channel uint8, r io.Reader, out *CayenneLPP) error {
-	var val int16
-	if err := binary.Read(r, binary.BigEndian, &val); err != nil {
-		return errors.Wrap(err, "read int16 error")
-	}
-	if out.Rate == nil {
-		out.Rate = make(map[uint8]float64)
-	}
-	out.Rate[channel] = float64(val) / 10
-	return nil
-}
-
-func lppRateEncode(channel uint8, w io.Writer, data float64) error {
-	w.Write([]byte{channel, lppRate})
-	if err := binary.Write(w, binary.BigEndian, int16(data*10)); err != nil {
-		return errors.Wrap(err, "write int16 error")
-	}
-	return nil
-}
-
-func lppRateDecode(channel uint8, r io.Reader, out *CayenneLPP) error {
-	var val int16
-	if err := binary.Read(r, binary.BigEndian, &val); err != nil {
-		return errors.Wrap(err, "read int16 error")
-	}
-	if out.Rate == nil {
-		out.Rate = make(map[uint8]float64)
-	}
-	out.Rate[channel] = float64(val) / 10
-	return nil
-}
-
-func lppRateEncode(channel uint8, w io.Writer, data float64) error {
-	w.Write([]byte{channel, lppRate})
-	if err := binary.Write(w, binary.BigEndian, int16(data*10)); err != nil {
-		return errors.Wrap(err, "write int16 error")
-	}
-	return nil
-}
-
-func lppRateDecode(channel uint8, r io.Reader, out *CayenneLPP) error {
-	var val int16
-	if err := binary.Read(r, binary.BigEndian, &val); err != nil {
-		return errors.Wrap(err, "read int16 error")
-	}
-	if out.Rate == nil {
-		out.Rate = make(map[uint8]float64)
-	}
-	out.Rate[channel] = float64(val) / 10
-	return nil
-}
-
-func lppRateEncode(channel uint8, w io.Writer, data float64) error {
-	w.Write([]byte{channel, lppRate})
-	if err := binary.Write(w, binary.BigEndian, int16(data*10)); err != nil {
-		return errors.Wrap(err, "write int16 error")
-	}
-	return nil
-}
-
-func lppRateDecode(channel uint8, r io.Reader, out *CayenneLPP) error {
-	var val int16
-	if err := binary.Read(r, binary.BigEndian, &val); err != nil {
-		return errors.Wrap(err, "read int16 error")
-	}
-	if out.Rate == nil {
-		out.Rate = make(map[uint8]float64)
-	}
-	out.Rate[channel] = float64(val) / 10
-	return nil
-}
-
-func lppRateEncode(channel uint8, w io.Writer, data float64) error {
-	w.Write([]byte{channel, lppRate})
-	if err := binary.Write(w, binary.BigEndian, int16(data*10)); err != nil {
-		return errors.Wrap(err, "write int16 error")
-	}
-	return nil
-}
-
-func lppPushButtonDecode(channel uint8, r io.Reader, out *CayenneLPP) error {
 	var b uint8
 	if err := binary.Read(r, binary.BigEndian, &b); err != nil {
 		return errors.Wrap(err, "read uint8 error")
@@ -1901,13 +1600,13 @@ func lppMultistateSelectorDecode(channel uint8, r io.Reader, out *CayenneLPP) er
 		return errors.Wrap(err, "read int16 error")
 	}
 	if out.MultistateSelector == nil {
-		out.MultistateSelector = make(map[uint8]float64)
+		out.MultistateSelector = make(map[uint8]uint16)
 	}
-	out.MultistateSelector[channel] = val
+	out.MultistateSelector[channel] = uint16(val)
 	return nil
 }
 
-func lppMultistateSelectorEncode(channel uint8, w io.Writer, data float64) error {
+func lppMultistateSelectorEncode(channel uint8, w io.Writer, data uint16) error {
 	w.Write([]byte{channel, lppMultistateSelector})
 	if err := binary.Write(w, binary.BigEndian, int16(data)); err != nil {
 		return errors.Wrap(err, "write int16 error")
@@ -2043,7 +1742,7 @@ func lppAirQualityDecode(channel uint8, r io.Reader, out *CayenneLPP) error {
 	if out.AirQuality == nil {
 		out.AirQuality = make(map[uint8]float64)
 	}
-	out.AirQuality[channel] = val
+	out.AirQuality[channel] = float64(val)
 	return nil
 }
 
@@ -2174,4 +1873,3 @@ func lppVelocityEncode(channel uint8, w io.Writer, data float64) error {
 	}
 	return nil
 }
-
